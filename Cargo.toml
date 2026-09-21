@@ -1,0 +1,14 @@
+[package]
+name = "esc-sentry"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Strict-by-default sanitizer for terminal escape sequences in untrusted text."
+
+[lib]
+name = "esc_sentry"
+path = "src/lib.rs"
+
+[[bin]]
+name = "esc-sentry"
+path = "src/main.rs"
