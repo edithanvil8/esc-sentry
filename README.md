@@ -76,6 +76,17 @@ Exit status is `1` if anything was flagged, `0` if the input was clean.
 Pass `--quiet` to suppress the stderr report and just get the sanitized
 output and exit code.
 
+Pass `--format json` to get a single JSON object on stdout instead of
+sanitized text plus a separate stderr report:
+
+```
+$ printf 'title trick \x1b]0;evil\x07 rest' | esc-sentry --format json
+{"clean":false,"sanitized":"title trick  rest","violations":[{"type":"disallowed_sequence","kind":"OSC","offset":12,"bytes":"\u001b]0;evil\u0007"}]}
+```
+
+`--quiet` still applies: the report keeps `clean` and `sanitized` but the
+`violations` array is empty.
+
 ## what's not here yet
 
 This is a first cut of the scanner and CLI, covering CSI, OSC, DCS, SOS,
