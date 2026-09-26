@@ -54,6 +54,18 @@ for v in &result.violations {
 }
 ```
 
+If the input isn't guaranteed to be valid UTF-8 - a log file that mixes
+encodings, or a byte stream truncated mid character - use `scan_bytes`
+instead. It applies the same rules to `&[u8]` and returns the sanitized
+bytes rather than a `String`:
+
+```rust
+use esc_sentry::{scan_bytes, Policy};
+
+let untrusted: &[u8] = b"user: \x1b]0;pwned\x07 hey check this out";
+let result = scan_bytes(untrusted, &Policy::strict());
+```
+
 ## CLI usage
 
 ```
@@ -86,6 +98,12 @@ $ printf 'title trick \x1b]0;evil\x07 rest' | esc-sentry --format json
 
 `--quiet` still applies: the report keeps `clean` and `sanitized` but the
 `violations` array is empty.
+
+The CLI reads raw bytes - stdin or the input file don't need to be valid
+UTF-8. `--format text` writes `sanitized` back out byte for byte. `--format
+json` is the one exception: JSON text has to be valid Unicode, so if
+`sanitized` contains bytes that aren't valid UTF-8, that field alone falls
+back to lossy replacement.
 
 ## what's not here yet
 

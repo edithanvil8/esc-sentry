@@ -3,7 +3,7 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::process::ExitCode;
 
-use esc_sentry::{scan, Policy, Violation};
+use esc_sentry::{scan_bytes, BytesScanResult, Policy, Violation};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum OutputFormat {
@@ -47,16 +47,16 @@ fn main() -> ExitCode {
     }
 
     let input = match path {
-        Some(p) => match fs::read_to_string(&p) {
-            Ok(s) => s,
+        Some(p) => match fs::read(&p) {
+            Ok(bytes) => bytes,
             Err(e) => {
                 eprintln!("esc-sentry: cannot read {p}: {e}");
                 return ExitCode::from(2);
             }
         },
         None => {
-            let mut buf = String::new();
-            if let Err(e) = io::stdin().read_to_string(&mut buf) {
+            let mut buf = Vec::new();
+            if let Err(e) = io::stdin().read_to_end(&mut buf) {
                 eprintln!("esc-sentry: cannot read stdin: {e}");
                 return ExitCode::from(2);
             }
@@ -65,11 +65,11 @@ fn main() -> ExitCode {
     };
 
     let policy = Policy { lenient };
-    let result = scan(&input, &policy);
+    let result = scan_bytes(&input, &policy);
 
     match format {
         OutputFormat::Text => {
-            if io::stdout().write_all(result.sanitized.as_bytes()).is_err() {
+            if io::stdout().write_all(&result.sanitized).is_err() {
                 return ExitCode::from(2);
             }
             if !quiet {
@@ -99,12 +99,17 @@ fn main() -> ExitCode {
 /// Builds a single-line JSON report: `sanitized` is the cleaned text and
 /// `violations` mirrors what the text format prints to stderr, so scripts
 /// don't have to scrape `describe`'s human-readable strings.
-fn render_json_report(result: &esc_sentry::ScanResult, quiet: bool) -> String {
+///
+/// JSON text has to be valid Unicode, so if `sanitized` contains bytes that
+/// aren't valid UTF-8 (possible now that input isn't required to be), this
+/// falls back to lossy replacement for just that field. The `--format text`
+/// path has no such limit - it writes `sanitized` out byte for byte.
+fn render_json_report(result: &BytesScanResult, quiet: bool) -> String {
     let mut out = String::new();
     out.push_str(r#"{"clean":"#);
     out.push_str(if result.is_clean() { "true" } else { "false" });
     out.push_str(r#","sanitized":""#);
-    out.push_str(&json_escape(&result.sanitized));
+    out.push_str(&json_escape(&String::from_utf8_lossy(&result.sanitized)));
     out.push_str(r#"","violations":["#);
     if !quiet {
         for (idx, v) in result.violations.iter().enumerate() {
@@ -194,10 +199,11 @@ fn escape_for_display(s: &str) -> String {
 fn print_help() {
     println!("esc-sentry [--lenient] [--quiet] [--format text|json] [file]");
     println!();
-    println!("Reads text (from a file, or stdin if no file is given), strips");
-    println!("terminal escape sequences that are not on the strict allowlist,");
-    println!("and writes the sanitized text to stdout. Anything flagged is");
-    println!("reported on stderr, one line per finding.");
+    println!("Reads bytes (from a file, or stdin if no file is given - valid");
+    println!("UTF-8 not required), strips terminal escape sequences that are");
+    println!("not on the strict allowlist, and writes the sanitized bytes to");
+    println!("stdout. Anything flagged is reported on stderr, one line per");
+    println!("finding.");
     println!();
     println!("  --lenient        allow any well-formed escape sequence through");
     println!("                   (sequences that never terminate are still dropped)");
